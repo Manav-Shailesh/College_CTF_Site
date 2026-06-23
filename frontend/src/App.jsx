@@ -11,7 +11,7 @@ import Home from './pages/Home.jsx';
 import Register from './pages/Register.jsx';
 import Login from './pages/Login.jsx';
 import Terminal from './pages/Terminal.jsx';
-import Leaderboard from './pages/Leaderboard.jsx';
+import Leaderboard from './pages/LeaderBoard.jsx';
 import AdminLogin from './pages/AdminLogin.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 
