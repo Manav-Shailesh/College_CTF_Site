@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --color-noxBlack: #050505;
+  --color-noxPanel: #0b0b0c;
+  --color-noxRed: #e2231a;
+  --color-noxRedDim: #6e120d;
+  --color-noxWhite: #f3f1ee;
+  --color-noxAsh: #75736f;
+
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Consolas, 'Liberation Mono', monospace;
+
+  --shadow-noxGlow: 0 0 12px rgba(226, 35, 26, 0.35);
+  --shadow-noxGlowLg: 0 0 20px rgba(226, 35, 26, 0.6);
+
+  --animate-fadeIn: fadeIn 0.35s ease;
+  --animate-shake: shake 0.4s ease;
+  --animate-logoPulse: logoPulse 4.5s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+@keyframes logoPulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(226,35,26,0.45)); }
+  50% { filter: drop-shadow(0 0 18px rgba(226,35,26,0.45)); }
+}
+
+body {
+  background-color: #050505;
+  color: #f3f1ee;
+  min-height: 100vh;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(226, 35, 26, 0.1), transparent 55%),
+    radial-gradient(ellipse at 50% 110%, rgba(226, 35, 26, 0.06), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+}
+
+/* ============================================================
+   NOX logo animation — restored from the original nox.html.
+   Tailwind utilities can't express stroke-dasharray draw-on
+   animation, so this stays as plain CSS, scoped under .nox-logo
+   so it never leaks into anything else on the page.
+   ============================================================ */
+.nox-logo {
+  overflow: visible;
+  animation: logoPulse 4.5s ease-in-out infinite;
+}
+
+.nox-logo .draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drawLine 0.8s ease forwards;
+}
+@keyframes drawLine {
+  to { stroke-dashoffset: 0; }
+}
+
+.nox-logo .pupil,
+.nox-logo .glint {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  animation: popIn 0.3s ease forwards;
+}
+@keyframes popIn {
+  to { transform: scale(1); }
+}
+
+.nox-logo .eye-rig {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 6.5s ease-in-out infinite;
+  animation-delay: 2.2s;
+}
+@keyframes blink {
+  0%, 91%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(0.07); }
+  97% { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nox-logo, .nox-logo .draw, .nox-logo .pupil, .nox-logo .glint, .nox-logo .eye-rig {
+    animation: none !important;
+  }
+  .nox-logo .draw { stroke-dashoffset: 0; }
+  .nox-logo .pupil, .nox-logo .glint { transform: scale(1); }
+}
