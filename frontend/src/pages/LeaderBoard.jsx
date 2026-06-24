@@ -86,7 +86,7 @@ export default function Leaderboard() {
       </main>
 
       <footer className="text-center mt-12 pt-5 border-t border-white/10 text-noxAsh text-xs leading-relaxed">
-        <p><strong className="text-noxWhite tracking-wider">NOX</strong> — ranked by total time from first flag to seventh.</p>
+        <p><strong className="text-noxWhite tracking-wider">NOX</strong> — ranked by total time taken.</p>
       </footer>
     </div>
   );
