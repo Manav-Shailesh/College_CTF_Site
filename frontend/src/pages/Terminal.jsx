@@ -197,8 +197,7 @@ export default function Terminal() {
 
       <footer className="text-center mt-12 pt-5 border-t border-white/10 text-noxAsh text-xs leading-relaxed">
         <p>
-          <strong className="text-noxWhite tracking-wider">NOX</strong> — flags are validated server-side. No answers ever reach this page.
-        </p>
+          <strong className="text-noxWhite tracking-wider">NOX</strong> — CTF
       </footer>
     </div>
   );
