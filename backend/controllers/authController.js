@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
+import BannedEmail from '../models/BannedEmail.js';
 import { signUserToken } from '../utils/token.js';
 
 const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAIN || '')
