@@ -79,7 +79,6 @@ export default function Register() {
 
       <div className="max-w-md mx-auto bg-noxPanel border border-white/10 rounded-lg p-8">
         <h2 className="text-xl tracking-wider text-center font-bold mb-1">REGISTER</h2>
-        <p className="text-center text-noxAsh text-sm mb-7">Christ University email required</p>
 
         {error && (
           <div className="bg-noxRed/10 border border-noxRed text-noxWhite text-sm px-4 py-3 rounded-md mb-5">
