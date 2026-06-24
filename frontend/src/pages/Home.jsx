@@ -23,20 +23,13 @@ export default function Home() {
         </div>
         <p className="text-noxAsh text-sm leading-relaxed my-4">
          NOX is a community of offsec students. We create CTF Labs with real-world problems that keep you thinking. 
-         Bring your curiosity, sharpen your skills, and push your limits.In NOX’s CTF Labs, every solve is progress—every next round raises the bar.
+         Bring your curiosity, sharpen your skills, and push your limits.
+        </p>
+        <p className="text-noxAsh text-sm leading-relaxed my-4">
+          In NOX’s CTF Labs, every solve is progress—every next round raises the bar.
         </p>
         <div className="text-center my-8">
-  <p
-    className="text-2xl md:text-3xl font-bold tracking-[0.25em] uppercase text-noxRed animate-pulse"
-    style={{
-      textShadow: `
-        0 0 5px rgba(226,35,26,0.8),
-        0 0 15px rgba(226,35,26,0.7),
-        0 0 30px rgba(226,35,26,0.5)
-      `,
-      letterSpacing: '0.3em',
-    }}
-  >
+  <p className="text-noxAsh text-sm leading-relaxed my-4">
     Let's Make It Chaotic.
   </p>
 </div>
@@ -57,7 +50,7 @@ export default function Home() {
       </main>
 
       <footer className="text-center mt-12 pt-5 border-t border-white/10 text-noxAsh text-xs leading-relaxed">
-        <p><strong className="text-noxWhite tracking-wider">NOX</strong> — Christ University</p>
+        <p><strong className="text-noxWhite tracking-wider">NOX</strong> - CTF</p>
       </footer>
     </div>
   );
