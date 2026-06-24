@@ -22,8 +22,10 @@ export default function Home() {
           <h2 className="text-lg tracking-[0.18em] font-bold">ABOUT</h2>
         </div>
         <p className="text-noxAsh text-sm leading-relaxed my-4">
-         NOX is a community of offsec students. We create CTF Labs with real-world problems that keep you thinking.<br> 
-         Bring your curiosity, sharpen your skills, and push your limits.In NOX’s CTF Labs, every solve is progress—every next round raises the bar.
+         NOX is a community of offsec students. We create CTF Labs with real-world problems that keep you thinking. 
+         Bring your curiosity, sharpen your skills, and push your limits. 
+        <p className="text-noxAsh text-sm leading-relaxed my-4">
+          In NOX’s CTF Labs, every solve is progress—every next round raises the bar.
         </p>
         <div className="text-center my-8">
   <p className="text-noxAsh text-sm leading-relaxed my-4">
