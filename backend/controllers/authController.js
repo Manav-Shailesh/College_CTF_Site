@@ -57,6 +57,15 @@ export async function register(req, res) {
         message: `Registration is restricted to ${allowedDomains.join(', ')} email addresses.`
       });
     }
+    if (!isAllowedEmail(email)) {
+      return res.status(400).json({
+        message: `Registration is restricted to ${allowedDomains.join(', ')} email addresses.`
+      });
+    }
+    const isBanned = await BannedEmail.findOne({ email: email.toLowerCase().trim() });
+    if (isBanned) {
+      return res.status(403).json({ message: 'This email address is not permitted to register.' });
+    }
     if (trimmedUsername.toLowerCase() === email.toLowerCase().trim()) {
       return res.status(400).json({ message: 'Username and email cannot be the same.' });
     }

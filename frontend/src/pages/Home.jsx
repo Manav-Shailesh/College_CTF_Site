@@ -19,18 +19,27 @@ export default function Home() {
       <main className="bg-noxPanel border border-white/10 rounded-lg p-8">
         <div className="flex items-center gap-3 mb-2 flex-wrap">
           <span className="text-2xl text-noxRed" style={{ textShadow: '0 0 12px rgba(226,35,26,0.45)' }}>⛧</span>
-          <h2 className="text-lg tracking-[0.18em] font-bold">ABOUT NOX</h2>
+          <h2 className="text-lg tracking-[0.18em] font-bold">ABOUT</h2>
         </div>
         <p className="text-noxAsh text-sm leading-relaxed my-4">
-          NOX is a seven-stage flag validation terminal built around the seven deadly sins.
-          Each sin guards one flag. Register with your Christ University email, work through
-          the dossiers in any order, and submit the correct flag for each sin to clear it.
+         NOX is a community of offsec students. We create CTF Labs with real-world problems that keep you thinking. 
+         Bring your curiosity, sharpen your skills, and push your limits.In NOX’s CTF Labs, every solve is progress—every next round raises the bar.
         </p>
-        <p className="text-noxAsh text-sm leading-relaxed my-4">
-          Completing all seven flags places you on the leaderboard, ranked by total time taken
-          from your first correct submission to your seventh. The fastest three finishers are
-          highlighted.
-        </p>
+        <div className="text-center my-8">
+  <p
+    className="text-2xl md:text-3xl font-bold tracking-[0.25em] uppercase text-noxRed animate-pulse"
+    style={{
+      textShadow: `
+        0 0 5px rgba(226,35,26,0.8),
+        0 0 15px rgba(226,35,26,0.7),
+        0 0 30px rgba(226,35,26,0.5)
+      `,
+      letterSpacing: '0.3em',
+    }}
+  >
+    Let's Make It Chaotic.
+  </p>
+</div>
         <div className="flex gap-3 flex-wrap mt-5">
           <Link
             to="/register"
