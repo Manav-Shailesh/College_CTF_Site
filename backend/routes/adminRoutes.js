@@ -4,11 +4,11 @@ import { getAdminOverview } from '../controllers/leaderboardController.js';
 import { removeUser, banUser, unbanUser, getBannedEmails } from '../controllers/adminUserController.js';
 import { setResource } from '../controllers/resourceController.js';
 import { requireAdmin } from '../middleware/auth.js';
-import { authLimiter } from '../middleware/rateLimiter.js';
+import { adminLoginLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
-router.post('/login', authLimiter, adminLogin);
+router.post('/login', adminLoginLimiter, adminLogin);
 router.get('/overview', requireAdmin, getAdminOverview);
 router.delete('/users/:email', requireAdmin, removeUser);
 router.post('/users/:email/ban', requireAdmin, banUser);
