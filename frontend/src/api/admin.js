@@ -15,3 +15,6 @@ export const fetchBannedEmails = (token) => request('/admin/banned', { token });
 
 export const unbanUser = (email, token) =>
   request(`/admin/users/${encodeURIComponent(email)}/ban`, { method: 'DELETE', token });
+
+export const setResourceLink = (driveLink, token) =>
+  request('/admin/resource', { method: 'POST', body: { driveLink }, token });

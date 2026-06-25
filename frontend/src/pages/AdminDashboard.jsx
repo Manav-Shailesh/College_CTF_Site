@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NoxLogo from '../components/NoxLogo.jsx';
-import { fetchAdminOverview, removeUser, banUser, fetchBannedEmails, unbanUser } from '../api/admin.js';
+import { fetchAdminOverview, removeUser, banUser, fetchBannedEmails, unbanUser,setResourceLink } from '../api/admin.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const SIN_ORDER = ['pride', 'greed', 'wrath', 'sloth', 'envy', 'gluttony', 'lust'];
@@ -27,19 +27,28 @@ export default function AdminDashboard() {
   const [confirming, setConfirming] = useState(null); // { email, action: 'remove' | 'ban' }
   const [activeTab, setActiveTab] = useState('users'); // 'users' | 'banned'
   const navigate = useNavigate();
+  const [driveLink, setDriveLink] = useState('');
+  const [driveLinkInput, setDriveLinkInput] = useState('');
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkMsg, setLinkMsg] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      fetchAdminOverview(adminToken),
-      fetchBannedEmails(adminToken)
-    ])
-      .then(([overviewData, bannedData]) => {
-        setUsers(overviewData.users);
-        setBanned(bannedData.banned);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [adminToken]);
+        Promise.all([
+          fetchAdminOverview(adminToken),
+          fetchBannedEmails(adminToken),
+          fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/flags/resource`, {
+            headers: { Authorization: `Bearer ${adminToken}` }
+          }).then((r) => r.json())
+        ])
+          .then(([overviewData, bannedData, resourceData]) => {
+            setUsers(overviewData.users);
+            setBanned(bannedData.banned);
+            setDriveLink(resourceData.driveLink || '');
+            setDriveLinkInput(resourceData.driveLink || '');
+          })
+          .catch((err) => setError(err.message))
+          .finally(() => setLoading(false));
+      }, [adminToken]);
 
   function handleLogout() {
     adminLogout();
@@ -50,6 +59,22 @@ export default function AdminDashboard() {
     setActionMsg(msg);
     setTimeout(() => setActionMsg(''), 4000);
   }
+
+  async function handleSaveLink() {
+  setLinkSaving(true);
+  setLinkMsg('');
+  try {
+    const res = await setResourceLink(driveLinkInput, adminToken);
+    setDriveLink(res.driveLink);
+    setDriveLinkInput(res.driveLink);
+    setLinkMsg('Resource link updated successfully.');
+  } catch (err) {
+    setLinkMsg('Error: ' + err.message);
+  } finally {
+    setLinkSaving(false);
+    setTimeout(() => setLinkMsg(''), 4000);
+  }
+}
 
   async function handleConfirm() {
     if (!confirming) return;
@@ -150,6 +175,41 @@ export default function AdminDashboard() {
           {actionMsg}
         </div>
       )}
+       
+          <div className="bg-noxPanel border border-white/10 rounded-lg p-6 mb-6">
+      <h3 className="text-xs tracking-widest uppercase text-noxAsh mb-4">
+        ⬡ Participant Resources — Google Drive Link
+      </h3>
+      {driveLink && (
+        <p className="text-xs text-noxAsh mb-3">
+          Current:{' '}
+          <a href={driveLink} target="_blank" rel="noopener noreferrer" className="text-noxRed underline break-all">
+            {driveLink}
+          </a>
+        </p>
+      )}
+      <div className="flex gap-3 flex-wrap">
+        <input
+          type="url"
+          value={driveLinkInput}
+          onChange={(e) => setDriveLinkInput(e.target.value)}
+          placeholder="https://drive.google.com/drive/folders/..."
+          className="flex-1 min-w-[280px] bg-black/40 border border-white/15 text-noxWhite font-mono text-sm px-4 py-2.5 rounded-md focus:outline-none focus:border-noxRed focus:ring-2 focus:ring-noxRed/20 transition-colors"
+        />
+        <button
+          onClick={handleSaveLink}
+          disabled={linkSaving || !driveLinkInput.trim()}
+          className="px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md bg-gradient-to-br from-noxRed to-noxRedDim text-noxWhite shadow-noxGlow hover:shadow-noxGlowLg disabled:opacity-60 disabled:cursor-wait transition-all"
+        >
+          {linkSaving ? 'Saving...' : 'Update Link'}
+        </button>
+      </div>
+      {linkMsg && (
+        <p className={`text-xs mt-3 ${linkMsg.startsWith('Error') ? 'text-noxRed' : 'text-noxAsh'}`}>
+          {linkMsg}
+        </p>
+      )}
+    </div>
 
       <main className="bg-noxPanel border border-white/10 rounded-lg p-8">
         {loading && <p className="text-center text-noxAsh py-8 text-sm">Loading overview...</p>}
