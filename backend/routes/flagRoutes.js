@@ -8,5 +8,6 @@ const router = express.Router();
 router.get('/progress', requireUser, getProgress);
 router.post('/:sin/submit', requireUser, submitLimiter, submitFlag);
 router.get('/resource', requireUser, getResource)
+router.get('/timer', getTimer);
 
 export default router;

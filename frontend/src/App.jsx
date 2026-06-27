@@ -14,10 +14,12 @@ import Terminal from './pages/Terminal.jsx';
 import Leaderboard from './pages/LeaderBoard.jsx';
 import AdminLogin from './pages/AdminLogin.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import { TimerProvider } from './context/TimerContext.jsx';
 
 export default function App() {
   return (
     <AuthProvider>
+      <TimerProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -66,6 +68,7 @@ export default function App() {
           />
         </Routes>
       </BrowserRouter>
+      </TimerProvider>
     </AuthProvider>
   );
 }

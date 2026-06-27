@@ -26,6 +26,12 @@ export async function submitFlag(req, res) {
     if (!candidate || !candidate.trim()) {
       return res.status(400).json({ message: 'Enter a flag before validating.' });
     }
+    import TimerState from '../models/TimerState.js';
+
+    const timer = await TimerState.findOne({});
+    if (!timer || !timer.isRunning || timer.isPaused) {
+      return res.status(403).json({ message: 'Timer is not running. Submissions are not allowed.' });
+    }
 
     const flagDoc = await Flag.findOne({ sin });
     if (!flagDoc) {
@@ -77,6 +83,10 @@ export async function submitFlag(req, res) {
       message: `Access granted - ${flagDoc.label.toUpperCase()} flag verified.`,
       completed: Boolean(user.completedAt)
     });
+   
+    if (user.solvedCount === 7 && !user.completedAt) {
+  user.completionTime = Date.now() - timer.startTime.getTime() - timer.pausedDuration;
+}
   } catch (err) {
     console.error('Submit flag error:', err);
     return res.status(500).json({ message: 'Something went wrong validating that flag.' });

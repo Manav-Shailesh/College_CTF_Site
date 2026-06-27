@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useContext } from 'react';
 import NoxLogo from '../components/NoxLogo.jsx';
 import TopNav from '../components/TopNav.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { TimerContext } from '../context/TimerContext.jsx';
 import { fetchProgress, submitFlag } from '../api/flags.js';
 
 const SIN_META = [
@@ -14,8 +15,19 @@ const SIN_META = [
   { key: 'lust', label: 'Lust', icon: '♡', desc: 'Submit the flag tied to the sin of Lust to clear this dossier.' }
 ];
 
+function formatTime(ms) {
+  const totalSecs = Math.floor(ms / 1000);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  const paddedMins = String(mins).padStart(2, '0');
+  const paddedSecs = String(secs).padStart(2, '0');
+  return hrs > 0 ? `${hrs}:${paddedMins}:${paddedSecs}` : `${paddedMins}:${paddedSecs}`;
+}
+
 export default function Terminal() {
   const { token } = useAuth();
+  const timerState = useContext(TimerContext);
   const [activeTab, setActiveTab] = useState('pride');
   const [progress, setProgress] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +53,20 @@ export default function Terminal() {
   }
 
   async function handleValidate(sin) {
+    // Check if timer is running
+    if (!timerState.isRunning) {
+      setFeedback((prev) => ({
+        ...prev,
+        [sin]: {
+          type: 'error',
+          message: timerState.isPaused
+            ? '⏸ TIMER IS PAUSED. SUBMISSIONS ARE BLOCKED.'
+            : '⭘ TIMER HAS NOT STARTED. SUBMISSIONS ARE NOT ALLOWED.'
+        }
+      }));
+      return;
+    }
+
     const candidate = (inputs[sin] || '').trim();
     if (!candidate) {
       setFeedback((prev) => ({ ...prev, [sin]: { type: 'error', message: '⚠ ENTER A FLAG BEFORE VALIDATING.' } }));
@@ -56,6 +82,8 @@ export default function Terminal() {
           [sin]: { ...(prev?.[sin] || {}), solved: true, solvedAt: new Date().toISOString() }
         }));
         setFeedback((prev) => ({ ...prev, [sin]: { type: 'success', message: '✓ ' + result.message.toUpperCase() } }));
+        // Clear input on success
+        setInputs((prev) => ({ ...prev, [sin]: '' }));
       } else {
         setShaking((prev) => ({ ...prev, [sin]: true }));
         setFeedback((prev) => ({ ...prev, [sin]: { type: 'error', message: '✗ ' + result.message.toUpperCase() } }));
@@ -83,6 +111,7 @@ export default function Terminal() {
   return (
     <div className="relative z-10 max-w-3xl mx-auto px-5 py-12 font-mono text-noxWhite">
       <TopNav />
+
       <header className="text-center mb-10">
         <NoxLogo />
         <h1 className="text-5xl font-bold tracking-[0.35em] mt-3 mb-1" style={{ textShadow: '0 0 18px rgba(226,35,26,0.45)' }}>
@@ -93,6 +122,48 @@ export default function Terminal() {
         </p>
       </header>
 
+      {/* Timer Display Panel */}
+      <div className="bg-noxPanel border border-white/10 rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-noxAsh mb-1">ELAPSED TIME</p>
+            <p className="text-3xl font-bold text-noxWhite font-mono" style={{ textShadow: '0 0 8px rgba(226,35,26,0.4)' }}>
+              {formatTime(timerState.elapsedMs)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-noxAsh mb-1">STATUS</p>
+            <p
+              className={`text-sm font-bold uppercase tracking-wider ${
+                timerState.isRunning
+                  ? 'text-noxRed'
+                  : timerState.isPaused
+                  ? 'text-[#f0a030]'
+                  : 'text-noxAsh'
+              }`}
+            >
+              {timerState.isRunning
+                ? '⬤ Running'
+                : timerState.isPaused
+                ? '⏸ Paused'
+                : '⭘ Waiting to Start'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Warning if timer not running */}
+      {!timerState.isRunning && (
+        <div className="bg-[#333]/50 border border-noxAsh/30 rounded-lg p-4 mb-6 text-center">
+          <p className="text-noxAsh text-sm">
+            {timerState.isPaused
+              ? '⏸ Timer is paused. Waiting for admin to resume...'
+              : '⭘ Waiting for admin to start the timer. Flag submissions are disabled.'}
+          </p>
+        </div>
+      )}
+
+      {/* Progress Counter */}
       <div className="max-w-md mx-auto mt-8">
         <div className="text-center text-xs tracking-wider text-noxAsh uppercase mb-2">
           <span className="text-noxWhite font-bold">{solvedCount}</span> / 7 SINS CONQUERED
@@ -105,6 +176,7 @@ export default function Terminal() {
         </div>
       </div>
 
+      {/* Sin Tabs */}
       <nav className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-8" role="tablist" aria-label="Sin selection">
         {SIN_META.map((sin) => {
           const isSolved = progress?.[sin.key]?.solved;
@@ -125,13 +197,16 @@ export default function Terminal() {
               {isSolved && (
                 <span className="absolute top-1 right-2 text-[0.65rem] text-noxRed">✓</span>
               )}
-              <span className="text-xl leading-none" aria-hidden="true">{sin.icon}</span>
+              <span className="text-xl leading-none" aria-hidden="true">
+                {sin.icon}
+              </span>
               {sin.label.toUpperCase()}
             </button>
           );
         })}
       </nav>
 
+      {/* Main Content */}
       <main className="bg-noxPanel border border-white/10 border-t-0 rounded-b-lg p-8">
         <section className="animate-fadeIn">
           <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -159,7 +234,7 @@ export default function Terminal() {
               spellCheck="false"
               placeholder={`ENTER FLAG FOR ${activeMeta.label.toUpperCase()}...`}
               value={inputs[activeTab] || ''}
-              disabled={activeProgress?.solved}
+              disabled={activeProgress?.solved || !timerState.isRunning}
               onChange={(e) => handleInputChange(activeTab, e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -170,15 +245,25 @@ export default function Terminal() {
               onAnimationEnd={() => setShaking((prev) => ({ ...prev, [activeTab]: false }))}
               className={`flex-1 min-w-[240px] bg-black/40 border text-noxWhite font-mono text-sm px-4 py-3.5 rounded-md
                 focus:outline-none focus:ring-2 focus:ring-noxRed/20 transition-colors
-                ${activeProgress?.solved ? 'border-noxRed bg-noxRed/5' : 'border-white/15 focus:border-noxRed'}
+                ${activeProgress?.solved ? 'border-noxRed bg-noxRed/5' : timerState.isRunning ? 'border-white/15 focus:border-noxRed' : 'border-white/15 bg-black/60 opacity-50'}
                 ${shaking[activeTab] ? 'animate-shake' : ''}`}
             />
             <button
-              disabled={verifying[activeTab] || activeProgress?.solved}
+              disabled={verifying[activeTab] || activeProgress?.solved || !timerState.isRunning}
               onClick={() => handleValidate(activeTab)}
-              className="bg-gradient-to-br from-noxRed to-noxRedDim text-noxWhite font-bold tracking-wider text-xs px-6 py-3.5 rounded-md shadow-noxGlow hover:shadow-noxGlowLg disabled:opacity-60 disabled:cursor-wait transition-all whitespace-nowrap"
+              className={`font-bold tracking-wider text-xs px-6 py-3.5 rounded-md transition-all whitespace-nowrap ${
+                timerState.isRunning
+                  ? 'bg-gradient-to-br from-noxRed to-noxRedDim text-noxWhite shadow-noxGlow hover:shadow-noxGlowLg disabled:opacity-60'
+                  : 'bg-[#333] text-noxAsh cursor-not-allowed opacity-50'
+              }`}
             >
-              {verifying[activeTab] ? 'VERIFYING...' : activeProgress?.solved ? 'VERIFIED' : 'VALIDATE'}
+              {verifying[activeTab]
+                ? 'VERIFYING...'
+                : activeProgress?.solved
+                ? 'VERIFIED'
+                : timerState.isRunning
+                ? 'VALIDATE'
+                : 'WAITING FOR TIMER'}
             </button>
           </div>
 
@@ -198,7 +283,7 @@ export default function Terminal() {
       <footer className="text-center mt-12 pt-5 border-t border-white/10 text-noxAsh text-xs leading-relaxed">
         <p>
           <strong className="text-noxWhite tracking-wider">NOX</strong> — CTF
-          </p>
+        </p>
       </footer>
     </div>
   );
