@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 import Flag from '../models/Flag.js';
 import User, { SINS } from '../models/User.js';
-
+ import TimerState from '../models/TimerState.js';
+ 
 export async function getProgress(req, res) {
   const progress = {};
   for (const sin of SINS) {
@@ -26,7 +27,7 @@ export async function submitFlag(req, res) {
     if (!candidate || !candidate.trim()) {
       return res.status(400).json({ message: 'Enter a flag before validating.' });
     }
-    import TimerState from '../models/TimerState.js';
+   
 
     const timer = await TimerState.findOne({});
     if (!timer || !timer.isRunning || timer.isPaused) {
