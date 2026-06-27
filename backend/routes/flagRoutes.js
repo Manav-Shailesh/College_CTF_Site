@@ -3,6 +3,7 @@ import { getProgress, submitFlag } from '../controllers/flagController.js';
 import { getResource } from '../controllers/resourceController.js';
 import { requireUser } from '../middleware/auth.js';
 import { submitLimiter } from '../middleware/rateLimiter.js';
+import { getTimer} from '../controllers/timerController.js';
 
 const router = express.Router();
 router.get('/progress', requireUser, getProgress);
