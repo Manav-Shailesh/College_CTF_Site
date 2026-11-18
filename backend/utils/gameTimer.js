@@ -2,76 +2,105 @@
 import TimerState from '../models/TimerState.js';
 
 export async function getOrCreateGameTimer() {
-  let rawTimer = await TimerState.collection.findOne({});
 
-  if (!rawTimer) {
-    try {
-      return await TimerState.create({
-        key: 'global',
-        state: 'NOT_STARTED',
-        startedAt: null,
-        stoppedAt: null,
-        finalElapsedMs: 0,
-        submissionSequence: 0
-      });
-    } catch (error) {
-      // Another request may have created it simultaneously.
-      if (error.code === 11000) {
-        return await TimerState.findOne({ key: 'global' });
-      }
-      throw error;
-    }
+  // First, look for the current global timer.
+  let timer = await TimerState.findOne({ key: 'global' });
+
+  if (timer) {
+    return timer;
   }
 
-  // Migrate the previous timer format once.
-  if (!rawTimer.state) {
+  // Look for an old timer document that has not yet been migrated.
+  const legacy = await TimerState.collection.findOne({
+    key: { $exists: false }
+  });
+
+  if (legacy) {
+
     let state = 'NOT_STARTED';
     let startedAt = null;
     let stoppedAt = null;
     let finalElapsedMs = 0;
 
-    if (rawTimer.startTime) {
-      startedAt = rawTimer.startTime;
+    if (legacy.startTime) {
 
-      if (rawTimer.isRunning && !rawTimer.isPaused) {
+      startedAt = legacy.startTime;
+
+      if (legacy.isRunning && !legacy.isPaused) {
         state = 'RUNNING';
       } else {
-        // A previously paused/stopped game stays locked.
         state = 'STOPPED';
-        stoppedAt = rawTimer.updatedAt || new Date();
+
+        stoppedAt = legacy.updatedAt || new Date();
 
         finalElapsedMs = Math.max(
           0,
           stoppedAt.getTime() -
           startedAt.getTime() -
-          (rawTimer.pausedDuration || 0)
+          (legacy.pausedDuration || 0)
         );
       }
     }
 
-    await TimerState.collection.updateOne(
-      { _id: rawTimer._id },
+    try {
+      await TimerState.collection.updateOne(
+        {
+          _id: legacy._id,
+          key: { $exists: false }
+        },
+        {
+          $set: {
+            key: 'global',
+            state,
+            startedAt,
+            stoppedAt,
+            finalElapsedMs,
+            submissionSequence: 0
+          }
+        }
+      );
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+    }
+
+    timer = await TimerState.findOne({ key: 'global' });
+
+    if (timer) return timer;
+  }
+
+  // Create the global timer atomically.
+  try {
+
+    timer = await TimerState.findOneAndUpdate(
+      { key: 'global' },
       {
-        $set: {
+        $setOnInsert: {
           key: 'global',
-          state,
-          startedAt,
-          stoppedAt,
-          finalElapsedMs,
+          state: 'NOT_STARTED',
+          startedAt: null,
+          stoppedAt: null,
+          finalElapsedMs: 0,
           submissionSequence: 0
         }
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
       }
     );
 
-    rawTimer = await TimerState.collection.findOne({
-      _id: rawTimer._id
-    });
-  } else if (!rawTimer.key) {
-    await TimerState.collection.updateOne(
-      { _id: rawTimer._id },
-      { $set: { key: 'global' } }
-    );
-  }
+    return timer;
 
-  return await TimerState.findById(rawTimer._id);
+  } catch (error) {
+
+    // Another request may have created it simultaneously.
+    if (error.code === 11000) {
+      timer = await TimerState.findOne({ key: 'global' });
+
+      if (timer) return timer;
+    }
+
+    throw error;
+  }
 }

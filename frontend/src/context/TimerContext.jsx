@@ -1,10 +1,18 @@
 
-import { createContext, useState, useEffect, useCallback } from 'react';
+import {
+  createContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef
+} from 'react';
+
 import request from '../api/client.js';
 
 export const TimerContext = createContext();
 
 export function TimerProvider({ children }) {
+
   const [timerState, setTimerState] = useState({
     state: 'NOT_STARTED',
     isRunning: false,
@@ -14,8 +22,16 @@ export function TimerProvider({ children }) {
     stoppedAt: null
   });
 
+  const requestInProgress = useRef(false);
+
   const refreshTimer = useCallback(async () => {
+
+    if (requestInProgress.current) return;
+
+    requestInProgress.current = true;
+
     try {
+
       const data = await request('/flags/timer');
 
       setTimerState({
@@ -28,13 +44,22 @@ export function TimerProvider({ children }) {
       });
 
       return data;
+
     } catch (err) {
+
       console.error('Timer fetch error:', err);
       throw err;
+
+    } finally {
+
+      requestInProgress.current = false;
+
     }
+
   }, []);
 
   useEffect(() => {
+
     refreshTimer().catch(() => {});
 
     const interval = setInterval(() => {
@@ -42,6 +67,7 @@ export function TimerProvider({ children }) {
     }, 1000);
 
     return () => clearInterval(interval);
+
   }, [refreshTimer]);
 
   return (
