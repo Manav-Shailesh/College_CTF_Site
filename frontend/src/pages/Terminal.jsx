@@ -52,49 +52,111 @@ export default function Terminal() {
     setInputs((prev) => ({ ...prev, [sin]: value }));
   }
 
-  async function handleValidate(sin) {
-    // Check if timer is running
-    if (!timerState.isRunning) {
+
+async function handleValidate(sin) {
+  // Check the authoritative game state.
+  if (timerState.state !== 'RUNNING') {
+    setFeedback((prev) => ({
+      ...prev,
+      [sin]: {
+        type: 'error',
+        message:
+          timerState.state === 'STOPPED'
+            ? '⏹ GAME ENDED. THE ADMINISTRATOR HAS CLOSED ALL FLAG SUBMISSIONS.'
+            : '⭘ WAITING FOR THE ADMINISTRATOR TO START THE GAME.'
+      }
+    }));
+
+    return;
+  }
+
+  const candidate = (inputs[sin] || '').trim();
+
+  if (!candidate) {
+    setFeedback((prev) => ({
+      ...prev,
+      [sin]: {
+        type: 'error',
+        message: '⚠ ENTER A FLAG BEFORE VALIDATING.'
+      }
+    }));
+
+    return;
+  }
+
+  setVerifying((prev) => ({
+    ...prev,
+    [sin]: true
+  }));
+
+  try {
+    const result = await submitFlag(sin, candidate, token);
+
+    if (result.correct) {
+      setProgress((prev) => ({
+        ...prev,
+        [sin]: {
+          ...(prev?.[sin] || {}),
+          solved: true,
+          solvedAt: new Date().toISOString()
+        }
+      }));
+
+      setFeedback((prev) => ({
+        ...prev,
+        [sin]: {
+          type: 'success',
+          message: '✓ ' + result.message.toUpperCase()
+        }
+      }));
+
+      setInputs((prev) => ({
+        ...prev,
+        [sin]: ''
+      }));
+
+    } else {
+      setShaking((prev) => ({
+        ...prev,
+        [sin]: true
+      }));
+
       setFeedback((prev) => ({
         ...prev,
         [sin]: {
           type: 'error',
-          message: timerState.isPaused
-            ? '⏸ TIMER IS PAUSED. SUBMISSIONS ARE BLOCKED.'
-            : '⭘ TIMER HAS NOT STARTED. SUBMISSIONS ARE NOT ALLOWED.'
+          message: '✗ ' + result.message.toUpperCase()
         }
       }));
-      return;
-    }
 
-    const candidate = (inputs[sin] || '').trim();
-    if (!candidate) {
-      setFeedback((prev) => ({ ...prev, [sin]: { type: 'error', message: '⚠ ENTER A FLAG BEFORE VALIDATING.' } }));
-      return;
-    }
-
-    setVerifying((prev) => ({ ...prev, [sin]: true }));
-    try {
-      const result = await submitFlag(sin, candidate, token);
-      if (result.correct) {
-        setProgress((prev) => ({
+      setTimeout(() => {
+        setShaking((prev) => ({
           ...prev,
-          [sin]: { ...(prev?.[sin] || {}), solved: true, solvedAt: new Date().toISOString() }
+          [sin]: false
         }));
-        setFeedback((prev) => ({ ...prev, [sin]: { type: 'success', message: '✓ ' + result.message.toUpperCase() } }));
-        // Clear input on success
-        setInputs((prev) => ({ ...prev, [sin]: '' }));
-      } else {
-        setShaking((prev) => ({ ...prev, [sin]: true }));
-        setFeedback((prev) => ({ ...prev, [sin]: { type: 'error', message: '✗ ' + result.message.toUpperCase() } }));
-        setTimeout(() => setShaking((prev) => ({ ...prev, [sin]: false })), 400);
-      }
-    } catch (err) {
-      setFeedback((prev) => ({ ...prev, [sin]: { type: 'error', message: '⚠ ' + err.message.toUpperCase() } }));
-    } finally {
-      setVerifying((prev) => ({ ...prev, [sin]: false }));
+      }, 400);
     }
+
+  } catch (err) {
+    // Refresh game state immediately after a rejected request.
+    await timerState.refreshTimer().catch(() => {});
+
+    setFeedback((prev) => ({
+      ...prev,
+      [sin]: {
+        type: 'error',
+        message: '⚠ ' + err.message.toUpperCase()
+      }
+    }));
+
+  } finally {
+    setVerifying((prev) => ({
+      ...prev,
+      [sin]: false
+    }));
   }
+}
+
 
   if (loading) {
     return (
@@ -142,26 +204,31 @@ export default function Terminal() {
                   : 'text-noxAsh'
               }`}
             >
-              {timerState.isRunning
-                ? '⬤ Running'
-                : timerState.isPaused
-                ? '⏸ Paused'
-                : '⭘ Waiting to Start'}
+            {timerState.state === 'RUNNING'
+                 ? '⬤ Running'
+                 : timerState.state === 'STOPPED'
+                 ? '⏹ Game Ended'
+                 : '⭘ Waiting to Start'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Warning if timer not running */}
-      {!timerState.isRunning && (
-        <div className="bg-[#333]/50 border border-noxAsh/30 rounded-lg p-4 mb-6 text-center">
-          <p className="text-noxAsh text-sm">
-            {timerState.isPaused
-              ? '⏸ Timer is paused. Waiting for admin to resume...'
-              : '⭘ Waiting for admin to start the timer. Flag submissions are disabled.'}
-          </p>
-        </div>
-      )}
+    
+{/* Competition State Warning */}
+
+{timerState.state !== 'RUNNING' && (
+  <div className="bg-[#333]/50 border border-noxAsh/30 rounded-lg p-4 mb-6 text-center">
+
+    <p className="text-noxAsh text-sm">
+      {timerState.state === 'STOPPED'
+        ? '⏹ THE COMPETITION HAS ENDED. ALL FLAG SUBMISSIONS ARE PERMANENTLY CLOSED.'
+        : '⭘ WAITING FOR THE ADMINISTRATOR TO START THE COMPETITION.'}
+    </p>
+
+  </div>
+)}
+
 
       {/* Progress Counter */}
       <div className="max-w-md mx-auto mt-8">
@@ -261,7 +328,9 @@ export default function Terminal() {
                 ? 'VERIFYING...'
                 : activeProgress?.solved
                 ? 'VERIFIED'
-                : timerState.isRunning
+                : timerState.state === 'STOPPED'
+                ? 'GAME ENDED'
+                : timerState.state === 'RUNNING'
                 ? 'VALIDATE'
                 : 'WAITING FOR TIMER'}
             </button>

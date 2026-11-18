@@ -1,133 +1,164 @@
-import TimerState from '../models/TimerState.js';
-import User from '../models/User.js';
 
-async function getOrCreateTimer() {
-  let timer = await TimerState.findOne({});
-  if (!timer) {
-    timer = await TimerState.create({});
-  }
-  return timer;
-}
+import mongoose from 'mongoose';
+import TimerState from '../models/TimerState.js';
+import { getOrCreateGameTimer } from '../utils/gameTimer.js';
 
 export async function getTimer(req, res) {
   try {
-    const timer = await getOrCreateTimer();
-    const elapsedMs = timer.isRunning && timer.startTime
-      ? Date.now() - timer.startTime.getTime() - timer.pausedDuration
-      : 0;
+    const timer = await getOrCreateGameTimer();
+
+    let elapsedMs = 0;
+
+    if (timer.state === 'RUNNING' && timer.startedAt) {
+      elapsedMs = Math.max(
+        0,
+        Date.now() - timer.startedAt.getTime()
+      );
+    } else if (timer.state === 'STOPPED') {
+      elapsedMs = timer.finalElapsedMs || 0;
+    }
 
     return res.json({
-      isRunning: timer.isRunning,
-      isPaused: timer.isPaused,
-      startTime: timer.startTime,
-      pausedDuration: timer.pausedDuration,
-      elapsedMs
+      state: timer.state,
+      startedAt: timer.startedAt,
+      stoppedAt: timer.stoppedAt,
+      elapsedMs,
+      isRunning: timer.state === 'RUNNING',
+      isPaused: false
     });
   } catch (err) {
-    return res.status(500).json({ message: 'Could not fetch timer.' });
+    console.error('Get timer error:', err);
+    return res.status(500).json({
+      message: 'Could not fetch timer.'
+    });
   }
 }
 
 export async function startTimer(req, res) {
-  try {
-    let timer = await getOrCreateTimer();
-    timer.isRunning = true;
-    timer.isPaused = false;
-    timer.startTime = new Date();
-    timer.pausedDuration = 0;
-    timer.updatedAt = new Date();
-    await timer.save();
+  const session = await mongoose.startSession();
 
-    return res.json({ message: 'Timer started.', isRunning: true });
+  try {
+    const timer = await getOrCreateGameTimer();
+
+    let started;
+
+    await session.withTransaction(async () => {
+      const now = new Date();
+
+      started = await TimerState.findOneAndUpdate(
+        {
+          _id: timer._id,
+          state: 'NOT_STARTED'
+        },
+        {
+          $set: {
+            state: 'RUNNING',
+            startedAt: now,
+            stoppedAt: null,
+            finalElapsedMs: 0
+          }
+        },
+        {
+          new: true,
+          session
+        }
+      );
+
+      if (!started) {
+        const error = new Error(
+          'Timer has already been started or the game has ended.'
+        );
+        error.status = 409;
+        throw error;
+      }
+    });
+
+    return res.json({
+      message: 'Competition timer started.',
+      state: started.state,
+      startedAt: started.startedAt
+    });
+
   } catch (err) {
-    return res.status(500).json({ message: 'Could not start timer.' });
+    console.error('Start timer error:', err);
+
+    return res.status(err.status || 500).json({
+      message: err.message || 'Could not start timer.'
+    });
+  } finally {
+    await session.endSession();
   }
 }
 
 export async function stopTimer(req, res) {
+  const session = await mongoose.startSession();
+
   try {
-    const timer = await getOrCreateTimer();
-    timer.isRunning = false;
-    timer.isPaused = false;
-    timer.updatedAt = new Date();
-    await timer.save();
+    const timer = await getOrCreateGameTimer();
 
-    return res.json({ message: 'Timer stopped. Flag submissions are now closed.' });
-  } catch (err) {
-    return res.status(500).json({ message: 'Could not stop timer.' });
-  }
-}
+    let stopped;
 
-export async function pauseTimer(req, res) {
-  try {
-    const timer = await getOrCreateTimer();
-    if (!timer.isRunning) {
-      return res.status(400).json({ message: 'Timer is not running.' });
-    }
+    await session.withTransaction(async () => {
+      // Read the current game state inside the transaction.
+      const current = await TimerState.findById(timer._id)
+        .session(session);
 
-    timer.isRunning = false;
-    timer.isPaused = true;
-    timer.updatedAt = new Date();
-    await timer.save();
-
-    return res.json({ message: 'Timer paused. Participants cannot submit flags.' });
-  } catch (err) {
-    return res.status(500).json({ message: 'Could not pause timer.' });
-  }
-}
-
-export async function continueTimer(req, res) {
-  try {
-    const timer = await getOrCreateTimer();
-    if (!timer.isPaused) {
-      return res.status(400).json({ message: 'Timer is not paused.' });
-    }
-
-    timer.isRunning = true;
-    timer.isPaused = false;
-    timer.updatedAt = new Date();
-    await timer.save();
-
-    return res.json({ message: 'Timer resumed.' });
-  } catch (err) {
-    return res.status(500).json({ message: 'Could not resume timer.' });
-  }
-}
-
-export async function resetTimer(req, res) {
-  try {
-    // Reset timer
-    const timer = await getOrCreateTimer();
-    timer.isRunning = false;
-    timer.isPaused = false;
-    timer.startTime = null;
-    timer.pausedDuration = 0;
-    timer.updatedAt = new Date();
-    await timer.save();
-
-    // Clear all user progress
-    await User.updateMany(
-      {},
-      {
-        progress: {
-          pride: { solved: false, solvedAt: null, attempts: 0 },
-          greed: { solved: false, solvedAt: null, attempts: 0 },
-          wrath: { solved: false, solvedAt: null, attempts: 0 },
-          sloth: { solved: false, solvedAt: null, attempts: 0 },
-          envy: { solved: false, solvedAt: null, attempts: 0 },
-          gluttony: { solved: false, solvedAt: null, attempts: 0 },
-          lust: { solved: false, solvedAt: null, attempts: 0 }
-        },
-        solvedCount: 0,
-        firstSolveAt: null,
-        completedAt: null,
-        completionTime: null
+      if (!current || current.state !== 'RUNNING') {
+        const error = new Error(
+          'Timer is not running or has already been stopped.'
+        );
+        error.status = 409;
+        throw error;
       }
-    );
 
-    return res.json({ message: 'Timer reset. All user progress cleared.' });
+      const stoppedAt = new Date();
+
+      const finalElapsedMs = Math.max(
+        0,
+        stoppedAt.getTime() - current.startedAt.getTime()
+      );
+
+      stopped = await TimerState.findOneAndUpdate(
+        {
+          _id: timer._id,
+          state: 'RUNNING'
+        },
+        {
+          $set: {
+            state: 'STOPPED',
+            stoppedAt,
+            finalElapsedMs
+          }
+        },
+        {
+          new: true,
+          session
+        }
+      );
+
+      if (!stopped) {
+        const error = new Error(
+          'Timer state changed. Please refresh and try again.'
+        );
+        error.status = 409;
+        throw error;
+      }
+    });
+
+    return res.json({
+      message: 'Competition ended. All flag submissions are closed.',
+      state: stopped.state,
+      stoppedAt: stopped.stoppedAt,
+      elapsedMs: stopped.finalElapsedMs
+    });
+
   } catch (err) {
-    console.error('Reset timer error:', err);
-    return res.status(500).json({ message: 'Could not reset timer.' });
+    console.error('Stop timer error:', err);
+
+    return res.status(err.status || 500).json({
+      message: err.message || 'Could not stop timer.'
+    });
+  } finally {
+    await session.endSession();
   }
 }

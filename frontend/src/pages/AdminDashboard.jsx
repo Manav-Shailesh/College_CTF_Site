@@ -1,9 +1,16 @@
 import { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NoxLogo from '../components/NoxLogo.jsx';
-import { fetchAdminOverview, removeUser, banUser, fetchBannedEmails, unbanUser, setResourceLink, startTimer, stopTimer, pauseTimer, continueTimer, resetTimer } from '../api/admin.js';
-import { useAuth } from '../context/AuthContext.jsx';
-import { TimerContext } from '../context/TimerContext.jsx';
+import {
+  fetchAdminOverview,
+  removeUser,
+  banUser,
+  fetchBannedEmails,
+  unbanUser,
+  setResourceLink,
+  startTimer,
+  stopTimer
+} from '../api/admin.js';
 
 const SIN_ORDER = ['pride', 'greed', 'wrath', 'sloth', 'envy', 'gluttony', 'lust'];
 
@@ -50,7 +57,7 @@ export default function AdminDashboard() {
 
   // Timer
   const [timerMsg, setTimerMsg] = useState('');
-  const [confirmReset, setConfirmReset] = useState(false);
+  const [timerBusy, setTimerBusy] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -81,74 +88,45 @@ export default function AdminDashboard() {
     setTimeout(() => setActionMsg(''), 4000);
   }
 
-  // ========== Timer Functions ==========
-  async function handleStartTimer() {
-    try {
-      const res = await startTimer(adminToken);
-      setTimerMsg(res.message);
-      setTimeout(() => setTimerMsg(''), 3000);
-    } catch (err) {
-      setTimerMsg('Error: ' + err.message);
-    }
-  }
+async function handleStartTimer() {
+  if (timerBusy || timerState.state !== 'NOT_STARTED') return;
 
-  async function handleStopTimer() {
-    try {
-      const res = await stopTimer(adminToken);
-      setTimerMsg(res.message);
-      setTimeout(() => setTimerMsg(''), 3000);
-    } catch (err) {
-      setTimerMsg('Error: ' + err.message);
-    }
-  }
+  setTimerBusy(true);
+  setTimerMsg('');
 
-  async function handlePauseTimer() {
-    try {
-      const res = await pauseTimer(adminToken);
-      setTimerMsg(res.message);
-      setTimeout(() => setTimerMsg(''), 3000);
-    } catch (err) {
-      setTimerMsg('Error: ' + err.message);
-    }
-  }
+  try {
+    const res = await startTimer(adminToken);
 
-  async function handleContinueTimer() {
-    try {
-      const res = await continueTimer(adminToken);
-      setTimerMsg(res.message);
-      setTimeout(() => setTimerMsg(''), 3000);
-    } catch (err) {
-      setTimerMsg('Error: ' + err.message);
-    }
-  }
+    await timerState.refreshTimer();
 
-  async function confirmAndResetTimer() {
-    setConfirmReset(false);
-    try {
-      const res = await resetTimer(adminToken);
-      setTimerMsg(res.message);
-      
-      // Reload overview after reset
-      Promise.all([
-        fetchAdminOverview(adminToken),
-        fetchBannedEmails(adminToken),
-        fetch(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/flags/resource`,
-          { headers: { Authorization: `Bearer ${adminToken}` } }
-        ).then((r) => r.json())
-      ])
-        .then(([overviewData, bannedData, resourceData]) => {
-          setUsers(overviewData.users);
-          setBanned(bannedData.banned);
-          setDriveLink(resourceData.driveLink || '');
-          setDriveLinkInput(resourceData.driveLink || '');
-        });
-
-      setTimeout(() => setTimerMsg(''), 3000);
-    } catch (err) {
-      setTimerMsg('Error: ' + err.message);
-    }
+    setTimerMsg(res.message);
+  } catch (err) {
+    await timerState.refreshTimer().catch(() => {});
+    setTimerMsg('Error: ' + err.message);
+  } finally {
+    setTimerBusy(false);
   }
+}
+//Time related 
+async function handleStopTimer() {
+  if (timerBusy || timerState.state !== 'RUNNING') return;
+
+  setTimerBusy(true);
+  setTimerMsg('');
+
+  try {
+    const res = await stopTimer(adminToken);
+
+    await timerState.refreshTimer();
+
+    setTimerMsg(res.message);
+  } catch (err) {
+    await timerState.refreshTimer().catch(() => {});
+    setTimerMsg('Error: ' + err.message);
+  } finally {
+    setTimerBusy(false);
+  }
+}
 
   // ========== Resource Link Functions ==========
   async function handleSaveLink() {
@@ -208,37 +186,90 @@ export default function AdminDashboard() {
   return (
     <div className="relative z-10 max-w-6xl mx-auto px-5 py-12 font-mono text-noxWhite">
       
-      {/* Reset Confirmation Dialog */}
-      {confirmReset && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-noxPanel border border-noxRed rounded-lg p-8 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-bold tracking-wider mb-3 text-noxRed">RESET TIMER?</h3>
-            <p className="text-noxAsh text-sm mb-6">
-              This will:
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Reset the timer to 00:00</li>
-                <li>Clear all participant progress</li>
-                <li>Remove all flag submissions</li>
-              </ul>
-              <span className="block mt-3 text-noxWhite">This action cannot be undone.</span>
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={confirmAndResetTimer}
-                className="flex-1 py-2.5 text-xs font-bold tracking-wider rounded-md uppercase bg-noxRed text-noxWhite hover:shadow-noxGlow transition-all"
-              >
-                Yes, Reset Everything
-              </button>
-              <button
-                onClick={() => setConfirmReset(false)}
-                className="flex-1 py-2.5 text-xs font-bold tracking-wider rounded-md uppercase border border-white/10 text-noxAsh hover:text-noxWhite transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+     {/* Timer Control Panel */}
+
+{/* Admin Controlled Competition Timer */}
+
+<div className="bg-gradient-to-r from-noxRed/10 to-noxRedDim/5 border border-noxRed/30 rounded-lg p-6 mb-6">
+
+  <div className="flex items-center justify-between flex-wrap gap-4">
+
+    <div>
+      <p className="text-xs tracking-widest uppercase text-noxAsh mb-1">
+        Competition Timer
+      </p>
+
+      <p
+        className="text-4xl font-bold text-noxWhite font-mono"
+        style={{
+          textShadow: '0 0 12px rgba(226,35,26,0.5)'
+        }}
+      >
+        {formatTime(timerState.elapsedMs)}
+      </p>
+
+      <p className="text-xs text-noxAsh mt-2">
+        {timerState.state === 'NOT_STARTED'
+          ? '⭘ NOT STARTED'
+          : timerState.state === 'RUNNING'
+          ? '⬤ RUNNING'
+          : '⏹ GAME ENDED'}
+      </p>
+
+      {timerState.startedAt && (
+        <p className="text-xs text-noxAsh mt-1">
+          Started: {new Date(timerState.startedAt).toLocaleString()}
+        </p>
       )}
+
+      {timerState.stoppedAt && (
+        <p className="text-xs text-noxAsh mt-1">
+          Stopped: {new Date(timerState.stoppedAt).toLocaleString()}
+        </p>
+      )}
+    </div>
+
+    <div className="flex gap-2 flex-wrap">
+
+      {timerState.state === 'NOT_STARTED' && (
+        <button
+          onClick={handleStartTimer}
+          disabled={timerBusy}
+          className="px-5 py-3 text-xs font-bold tracking-wider uppercase rounded-md bg-noxRed text-noxWhite hover:shadow-noxGlowLg disabled:opacity-50 transition-all"
+        >
+          {timerBusy ? 'PROCESSING...' : '▶ START TIMER'}
+        </button>
+      )}
+
+      {timerState.state === 'RUNNING' && (
+        <button
+          onClick={handleStopTimer}
+          disabled={timerBusy}
+          className="px-5 py-3 text-xs font-bold tracking-wider uppercase rounded-md border border-noxRed text-noxRed hover:bg-noxRed/10 disabled:opacity-50 transition-all"
+        >
+          {timerBusy ? 'PROCESSING...' : '⏹ STOP TIMER'}
+        </button>
+      )}
+
+      {timerState.state === 'STOPPED' && (
+        <span className="px-5 py-3 text-xs font-bold tracking-wider uppercase text-noxRed border border-noxRed/40 rounded-md">
+          COMPETITION ENDED
+        </span>
+      )}
+
+    </div>
+  </div>
+
+  {timerMsg && (
+    <p className={`text-xs mt-4 ${
+      timerMsg.startsWith('Error') ? 'text-noxRed' : 'text-noxAsh'
+    }`}>
+      {timerMsg}
+    </p>
+  )}
+
+</div>
+
 
       {/* User Remove/Ban Confirmation Dialog */}
       {confirming && (
