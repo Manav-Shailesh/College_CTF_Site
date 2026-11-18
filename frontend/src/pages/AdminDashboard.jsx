@@ -1,3 +1,4 @@
+import { useAuth } from '../context/AuthContext.jsx';
 import { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NoxLogo from '../components/NoxLogo.jsx';
@@ -11,6 +12,8 @@ import {
   startTimer,
   stopTimer
 } from '../api/admin.js';
+
+import { TimerContext } from '../context/TimerContext.jsx';
 
 const SIN_ORDER = ['pride', 'greed', 'wrath', 'sloth', 'envy', 'gluttony', 'lust'];
 
