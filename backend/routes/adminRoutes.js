@@ -11,16 +11,13 @@ import {
   getBannedEmails
 } from '../controllers/adminUserController.js';
 
-import { getResource,setResource } from '../controllers/resourceController.js';
+import {
+  getResource,
+  setResource
+} from '../controllers/resourceController.js';
 
 import { requireAdmin } from '../middleware/auth.js';
 import { adminLoginLimiter } from '../middleware/rateLimiter.js';
-
-import {
-  getTimer,
-  startTimer,
-  stopTimer
-} from '../controllers/timerController.js';
 
 const router = express.Router();
 
@@ -39,11 +36,5 @@ router.get('/banned', requireAdmin, getBannedEmails);
 // Resource management
 router.get('/resource', requireAdmin, getResource);
 router.post('/resource', requireAdmin, setResource);
-
-
-// Competition timer
-router.get('/timer', requireAdmin, getTimer);
-router.post('/timer/start', requireAdmin, startTimer);
-router.post('/timer/stop', requireAdmin, stopTimer);
 
 export default router;

@@ -4,9 +4,8 @@ import bcrypt from 'bcryptjs';
 
 import Flag from '../models/Flag.js';
 import User, { SINS } from '../models/User.js';
-import TimerState from '../models/TimerState.js';
-
-import { getOrCreateGameTimer } from '../utils/gameTimer.js';
+import GameSession from '../models/GameSession.js';
+import SessionProgress from '../models/SessionProgress.js';
 
 class GameStateError extends Error {
   constructor(message, status = 403) {
@@ -15,27 +14,100 @@ class GameStateError extends Error {
   }
 }
 
-export async function getProgress(req, res) {
-  try {
-    const user = await User.findById(req.user._id);
-
-    const progress = {};
-
-    for (const sin of SINS) {
-      const entry = user.progress.get(sin) || {
+function createEmptyProgress() {
+  return Object.fromEntries(
+    SINS.map((sin) => [
+      sin,
+      {
         solved: false,
         solvedAt: null,
         attempts: 0
-      };
+      }
+    ])
+  );
+}
 
-      progress[sin] = entry;
+function formatProgress(sessionProgress) {
+  const progress = {};
+
+  for (const sin of SINS) {
+    const entry = sessionProgress?.progress?.get(sin);
+
+    progress[sin] = entry
+      ? {
+          solved: entry.solved,
+          solvedAt: entry.solvedAt,
+          attempts: entry.attempts
+        }
+      : {
+          solved: false,
+          solvedAt: null,
+          attempts: 0
+        };
+  }
+
+  return progress;
+}
+
+export async function getProgress(req, res) {
+  try {
+    const [user, currentSession] = await Promise.all([
+      User.findById(req.user._id),
+      GameSession.findOne({ isCurrent: true })
+    ]);
+
+    if (!user) {
+      return res.status(401).json({
+        message: 'User account no longer exists.'
+      });
+    }
+
+    if (!currentSession) {
+      return res.json({
+        progress: createEmptyProgress(),
+        firstSolveAt: null,
+        completedAt: null,
+        completionTimeMs: null,
+        sessionId: null,
+        sessionState: null
+      });
+    }
+
+    let sessionProgress = await SessionProgress.findOne({
+      sessionId: currentSession._id,
+      userId: user._id
+    });
+
+    if (!sessionProgress) {
+      try {
+        sessionProgress = await SessionProgress.create({
+          sessionId: currentSession._id,
+          userId: user._id,
+          usernameSnapshot: user.username,
+          emailSnapshot: user.email
+        });
+      } catch (err) {
+        // Another simultaneous request may have created it.
+        if (err.code !== 11000) {
+          throw err;
+        }
+
+        sessionProgress = await SessionProgress.findOne({
+          sessionId: currentSession._id,
+          userId: user._id
+        });
+      }
     }
 
     return res.json({
-      progress,
-      firstSolveAt: user.firstSolveAt,
-      completedAt: user.completedAt
+      progress: formatProgress(sessionProgress),
+      firstSolveAt: sessionProgress.firstSolveAt,
+      completedAt: sessionProgress.completedAt,
+      completionTimeMs: sessionProgress.completionTimeMs,
+      sessionId: currentSession._id,
+      sessionState: currentSession.state
     });
+
   } catch (err) {
     console.error('Get progress error:', err);
 
@@ -46,11 +118,11 @@ export async function getProgress(req, res) {
 }
 
 export async function submitFlag(req, res) {
-  const session = await mongoose.startSession();
+  const transaction = await mongoose.startSession();
 
   try {
     const { sin } = req.params;
-    const { candidate } = req.body;
+    const { candidate } = req.body || {};
 
     if (!SINS.includes(sin)) {
       return res.status(400).json({
@@ -67,7 +139,20 @@ export async function submitFlag(req, res) {
       });
     }
 
-    const timer = await getOrCreateGameTimer();
+    const currentSession = await GameSession.findOne({
+      isCurrent: true
+    });
+
+    if (
+  !currentSession ||
+  currentSession.state !== 'RUNNING' ||
+  !currentSession.startedAt
+) {
+      throw new GameStateError(
+        'GAME ENDED. The administrator has closed flag submissions.',
+        403
+      );
+    }
 
     const flagDoc = await Flag.findOne({ sin });
 
@@ -77,8 +162,8 @@ export async function submitFlag(req, res) {
       });
     }
 
-    // Perform expensive bcrypt comparison before opening
-    // the transaction. Game state is checked again inside it.
+    // Verify the flag before opening the transaction.
+    // The game state is checked again inside the transaction.
     const isCorrect = await bcrypt.compare(
       candidate.trim(),
       flagDoc.answerHash
@@ -86,15 +171,15 @@ export async function submitFlag(req, res) {
 
     let result;
 
-    await session.withTransaction(async () => {
+    await transaction.withTransaction(async () => {
 
-      // CRITICAL:
-      // Every submission writes to the global timer document.
-      // Stop Timer also writes to this same document.
-      // MongoDB therefore serializes these competing writes.
-      const activeTimer = await TimerState.findOneAndUpdate(
+      // Every submission writes to the current GameSession document.
+      // Stop Session also writes to this same document.
+      // This makes the session state check atomic with submissions.
+      const activeSession = await GameSession.findOneAndUpdate(
         {
-          _id: timer._id,
+          _id: currentSession._id,
+          isCurrent: true,
           state: 'RUNNING'
         },
         {
@@ -104,20 +189,19 @@ export async function submitFlag(req, res) {
         },
         {
           new: true,
-          session
+          session: transaction
         }
       );
 
-      if (!activeTimer) {
+      if (!activeSession) {
         throw new GameStateError(
           'GAME ENDED. The administrator has closed flag submissions.',
           403
         );
       }
 
-      // Always reload the user inside the transaction.
       const user = await User.findById(req.user._id)
-        .session(session);
+        .session(transaction);
 
       if (!user) {
         throw new GameStateError(
@@ -126,7 +210,21 @@ export async function submitFlag(req, res) {
         );
       }
 
-      const entry = user.progress.get(sin) || {
+      let sessionProgress = await SessionProgress.findOne({
+        sessionId: activeSession._id,
+        userId: user._id
+      }).session(transaction);
+
+      if (!sessionProgress) {
+        sessionProgress = new SessionProgress({
+          sessionId: activeSession._id,
+          userId: user._id,
+          usernameSnapshot: user.username,
+          emailSnapshot: user.email
+        });
+      }
+
+      const entry = sessionProgress.progress.get(sin) || {
         solved: false,
         solvedAt: null,
         attempts: 0
@@ -138,15 +236,18 @@ export async function submitFlag(req, res) {
           alreadySolved: true,
           message: `${flagDoc.label} flag was already verified.`
         };
+
         return;
       }
 
       entry.attempts += 1;
 
       if (!isCorrect) {
-        user.progress.set(sin, entry);
+        sessionProgress.progress.set(sin, entry);
 
-        await user.save({ session });
+        await sessionProgress.save({
+          session: transaction
+        });
 
         result = {
           correct: false,
@@ -161,36 +262,46 @@ export async function submitFlag(req, res) {
       entry.solved = true;
       entry.solvedAt = now;
 
-      user.progress.set(sin, entry);
+      sessionProgress.progress.set(sin, entry);
 
-      if (!user.firstSolveAt) {
-        user.firstSolveAt = now;
+      if (!sessionProgress.firstSolveAt) {
+        sessionProgress.firstSolveAt = now;
       }
 
       const solvedCount = SINS.filter(
-        (key) => user.progress.get(key)?.solved
+        (key) => sessionProgress.progress.get(key)?.solved
       ).length;
 
       if (
         solvedCount === SINS.length &&
-        !user.completedAt
+        !sessionProgress.completedAt
       ) {
-        user.completedAt = now;
+        sessionProgress.completedAt = now;
 
-        // Preserve completion time as elapsed game time.
-        user.completionTime = Math.max(
-          0,
-          now.getTime() - activeTimer.startedAt.getTime()
-        );
+       if (!activeSession.startedAt) {
+  throw new GameStateError(
+    'Competition start time is missing. Submission cancelled.',
+    409
+  );
+}
+
+sessionProgress.completionTimeMs = Math.max(
+  0,
+  now.getTime() - new Date(activeSession.startedAt).getTime()
+);
+
       }
 
-      await user.save({ session });
+      await sessionProgress.save({
+        session: transaction
+      });
 
       result = {
         correct: true,
         alreadySolved: false,
         message: `Access granted - ${flagDoc.label.toUpperCase()} flag verified.`,
-        completed: Boolean(user.completedAt)
+        completed: Boolean(sessionProgress.completedAt),
+        completionTimeMs: sessionProgress.completionTimeMs
       };
     });
 
@@ -209,7 +320,8 @@ export async function submitFlag(req, res) {
     return res.status(500).json({
       message: 'Something went wrong validating that flag.'
     });
+
   } finally {
-    await session.endSession();
+    await transaction.endSession();
   }
 }

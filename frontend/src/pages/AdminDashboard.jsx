@@ -9,8 +9,10 @@ import {
   fetchBannedEmails,
   unbanUser,
   setResourceLink,
-  startTimer,
-  stopTimer
+  fetchSessions,
+  createSession,
+  startSession,
+  stopSession
 } from '../api/admin.js';
 
 import { TimerContext } from '../context/TimerContext.jsx';
@@ -62,36 +64,109 @@ export default function AdminDashboard() {
   const [timerMsg, setTimerMsg] = useState('');
   const [timerBusy, setTimerBusy] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      fetchAdminOverview(adminToken),
-      fetchBannedEmails(adminToken),
-   fetch(
-  `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/admin/resource`,
-  {
-    headers: {
-      Authorization: `Bearer ${adminToken}`
+  // Competition management
+  const [sessions, setSessions] = useState([]);
+  const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [sessionNameInput, setSessionNameInput] = useState('');
+  const [sessionBusy, setSessionBusy] = useState(false);
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadDashboard() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const [sessionsData, bannedData, resourceResponse] =
+        await Promise.all([
+          fetchSessions(adminToken),
+          fetchBannedEmails(adminToken),
+          fetch(
+            `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/admin/resource`,
+            {
+              headers: {
+                Authorization: `Bearer ${adminToken}`
+              }
+            }
+          ).then(async (r) => {
+            const data = await r.json();
+
+            if (!r.ok) {
+              throw new Error(
+                data.message || 'Could not fetch resource link.'
+              );
+            }
+
+            return data;
+          })
+        ]);
+
+      if (cancelled) return;
+
+      const sessionList = sessionsData.sessions || [];
+
+      setSessions(sessionList);
+      setBanned(bannedData.banned || []);
+
+      setDriveLink(resourceResponse.driveLink || '');
+      setDriveLinkInput(resourceResponse.driveLink || '');
+
+      const currentSession = sessionList.find(
+        (session) => session.isCurrent
+      );
+
+      const initialSessionId =
+        currentSession?._id ||
+        sessionList[0]?._id ||
+        '';
+
+      setSelectedSessionId(initialSessionId);
+
+    } catch (err) {
+      if (!cancelled) {
+        setError(err.message);
+      }
     }
   }
-).then(async (r) => {
-  const data = await r.json();
 
-  if (!r.ok) {
-    throw new Error(data.message || 'Could not fetch resource link.');
+  loadDashboard().finally(() => {
+    if (!cancelled) {
+      setLoading(false);
+    }
+  });
+
+  return () => {
+    cancelled = true;
+  };
+}, [adminToken]);
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadOverview() {
+    try {
+      const data = await fetchAdminOverview(
+        adminToken,
+        selectedSessionId || undefined
+      );
+
+      if (!cancelled) {
+        setUsers(data.users || []);
+      }
+    } catch (err) {
+      if (!cancelled) {
+        setError(err.message);
+      }
+    }
   }
 
-  return data;
-})
-    ])
-      .then(([overviewData, bannedData, resourceData]) => {
-        setUsers(overviewData.users);
-        setBanned(bannedData.banned);
-        setDriveLink(resourceData.driveLink || '');
-        setDriveLinkInput(resourceData.driveLink || '');
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [adminToken]);
+  loadOverview();
+
+  return () => {
+    cancelled = true;
+  };
+}, [adminToken, selectedSessionId]);
 
   function handleLogout() {
     adminLogout();
@@ -110,7 +185,7 @@ async function handleStartTimer() {
   setTimerMsg('');
 
   try {
-    const res = await startTimer(adminToken);
+    const res = await startSession(adminToken);
 
     await timerState.refreshTimer();
 
@@ -130,7 +205,7 @@ async function handleStopTimer() {
   setTimerMsg('');
 
   try {
-    const res = await stopTimer(adminToken);
+    const res = await stopSession(adminToken);
 
     await timerState.refreshTimer();
 
@@ -140,6 +215,35 @@ async function handleStopTimer() {
     setTimerMsg('Error: ' + err.message);
   } finally {
     setTimerBusy(false);
+  }
+}
+
+async function handleCreateSession() {
+  if (sessionBusy) return;
+
+  setSessionBusy(true);
+  setTimerMsg('');
+
+  try {
+    const res = await createSession(
+      sessionNameInput.trim(),
+      adminToken
+    );
+
+    const sessionsData = await fetchSessions(adminToken);
+
+    setSessions(sessionsData.sessions || []);
+    setSelectedSessionId(res.session._id);
+    setSessionNameInput('');
+
+    await timerState.refreshTimer();
+
+    setTimerMsg(res.message);
+
+  } catch (err) {
+    setTimerMsg('Error: ' + err.message);
+  } finally {
+    setSessionBusy(false);
   }
 }
 
@@ -264,6 +368,91 @@ async function handleStopTimer() {
         </div>
       )}
 
+{/* COMPETITION MANAGEMENT */}
+
+<div className="bg-noxPanel border border-white/10 rounded-lg p-6 mb-6">
+
+  <h3 className="text-xs tracking-widest uppercase text-noxAsh mb-5">
+    Competition Management
+  </h3>
+
+  <div className="mb-5">
+
+    <p className="text-xs text-noxAsh mb-2">
+      Current Competition
+    </p>
+
+    <p className="text-lg font-bold text-noxWhite">
+      {timerState.hasSession
+        ? timerState.sessionName
+        : 'No competition created'}
+    </p>
+
+    {timerState.sessionNumber && (
+      <p className="text-xs text-noxAsh mt-1">
+        Session #{timerState.sessionNumber}
+      </p>
+    )}
+
+  </div>
+
+  <div className="flex flex-wrap gap-3 mb-6">
+
+    <input
+      type="text"
+      maxLength={100}
+      value={sessionNameInput}
+      onChange={(e) => setSessionNameInput(e.target.value)}
+      placeholder="Enter competition name (optional)"
+      className="flex-1 min-w-[240px] bg-black/40 border border-white/15 text-noxWhite font-mono text-sm px-4 py-3 rounded-md focus:outline-none focus:border-noxRed"
+    />
+
+    <button
+      onClick={handleCreateSession}
+      disabled={
+        sessionBusy ||
+        timerState.state === 'RUNNING' ||
+        timerState.state === 'NOT_STARTED'
+          && timerState.hasSession
+      }
+      className="px-5 py-3 text-xs font-bold tracking-wider uppercase rounded-md bg-noxRed text-noxWhite hover:shadow-noxGlow disabled:opacity-40"
+    >
+      {sessionBusy ? 'CREATING...' : '+ NEW COMPETITION'}
+    </button>
+
+  </div>
+
+  <p className="text-xs text-noxAsh mb-5">
+    A new competition can only be created when the previous
+    competition has ended. Previous results remain archived.
+  </p>
+
+  <div>
+
+    <label className="block text-xs text-noxAsh uppercase tracking-wider mb-2">
+      View Competition Results
+    </label>
+
+    <select
+      value={selectedSessionId}
+      onChange={(e) => setSelectedSessionId(e.target.value)}
+      className="w-full bg-black/40 border border-white/15 text-noxWhite font-mono text-sm px-4 py-3 rounded-md focus:outline-none focus:border-noxRed"
+    >
+      {sessions.map((session) => (
+        <option
+          key={session._id}
+          value={session._id}
+          className="bg-[#111] text-white"
+        >
+          {session.name}
+          {session.isCurrent ? ' (CURRENT)' : ' (ARCHIVED)'}
+        </option>
+      ))}
+    </select>
+
+  </div>
+
+</div>
 
 {/* ADMIN CONTROLLED COMPETITION TIMER */}
 
@@ -306,7 +495,7 @@ async function handleStopTimer() {
 
     <div className="flex gap-3">
 
-      {timerState.state === 'NOT_STARTED' && (
+      {timerState.state === 'NOT_STARTED' && timerState.hasSession && (
         <button
           onClick={handleStartTimer}
           disabled={timerBusy}
@@ -436,7 +625,7 @@ async function handleStopTimer() {
                           ))}
                         </td>
                         <td className="px-2.5 py-3 border-b border-white/10 whitespace-nowrap">
-                          {formatDuration(u.completionTime)}
+                          {formatDuration(u.timeTakenMs)}
                         </td>
                         <td className="px-2.5 py-3 border-b border-white/10 whitespace-nowrap">
                           {u.completedAt ? new Date(u.completedAt).toLocaleString() : '—'}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useContext } from 'react';
+import { useEffect, useMemo, useState, useContext, useRef } from 'react';
 import NoxLogo from '../components/NoxLogo.jsx';
 import TopNav from '../components/TopNav.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -35,13 +35,50 @@ export default function Terminal() {
   const [feedback, setFeedback] = useState({});
   const [shaking, setShaking] = useState({});
   const [verifying, setVerifying] = useState({});
+  const flagInputRef = useRef(null);
 
-  useEffect(() => {
-    fetchProgress(token)
-      .then((data) => setProgress(data.progress))
-      .catch(() => setProgress({}))
-      .finally(() => setLoading(false));
-  }, [token]);
+  const currentSessionId = useRef(timerState.sessionId);
+
+// Keep track of the session currently displayed.
+currentSessionId.current = timerState.sessionId;
+
+useEffect(() => {
+  let cancelled = false;
+
+  setLoading(true);
+
+  // Clear all progress and temporary UI state when
+  // switching to another competition.
+  setProgress(null);
+  setInputs({});
+  setFeedback({});
+  setShaking({});
+  setVerifying({});
+  setActiveTab('pride');
+
+  fetchProgress(token)
+    .then((data) => {
+      if (!cancelled) {
+        setProgress(data.progress || {});
+      }
+    })
+    .catch((err) => {
+      console.error('Progress fetch error:', err);
+
+      if (!cancelled) {
+        setProgress({});
+      }
+    })
+    .finally(() => {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [token, timerState.sessionId]);
 
   const solvedCount = useMemo(() => {
     if (!progress) return 0;
@@ -70,7 +107,9 @@ async function handleValidate(sin) {
     return;
   }
 
-  const candidate = (inputs[sin] || '').trim();
+const candidate = String(
+  flagInputRef.current?.value ?? inputs[sin] ?? ''
+).trim();
 
   if (!candidate) {
     setFeedback((prev) => ({
@@ -89,72 +128,82 @@ async function handleValidate(sin) {
     [sin]: true
   }));
 
-  try {
-    const result = await submitFlag(sin, candidate, token);
+ const submittedSessionId = timerState.sessionId;
 
-    if (result.correct) {
-      setProgress((prev) => ({
-        ...prev,
-        [sin]: {
-          ...(prev?.[sin] || {}),
-          solved: true,
-          solvedAt: new Date().toISOString()
-        }
-      }));
+try {
+  const result = await submitFlag(sin, candidate, token);
 
-      setFeedback((prev) => ({
-        ...prev,
-        [sin]: {
-          type: 'success',
-          message: '✓ ' + result.message.toUpperCase()
-        }
-      }));
+  // Don't update the screen if the competition changed.
+  if (currentSessionId.current !== submittedSessionId) {
+    return;
+  }
 
-      setInputs((prev) => ({
-        ...prev,
-        [sin]: ''
-      }));
+  if (result.correct) {
+    setProgress((prev) => ({
+      ...prev,
+      [sin]: {
+        ...(prev?.[sin] || {}),
+        solved: true,
+        solvedAt: new Date().toISOString()
+      }
+    }));
 
-    } else {
-      setShaking((prev) => ({
-        ...prev,
-        [sin]: true
-      }));
+    setFeedback((prev) => ({
+      ...prev,
+      [sin]: {
+        type: 'success',
+        message: '✓ ' + result.message.toUpperCase()
+      }
+    }));
 
-      setFeedback((prev) => ({
-        ...prev,
-        [sin]: {
-          type: 'error',
-          message: '✗ ' + result.message.toUpperCase()
-        }
-      }));
+    setInputs((prev) => ({
+      ...prev,
+      [sin]: ''
+    }));
 
-      setTimeout(() => {
-        setShaking((prev) => ({
-          ...prev,
-          [sin]: false
-        }));
-      }, 400);
-    }
-
-  } catch (err) {
-    // Refresh game state immediately after a rejected request.
-    await timerState.refreshTimer().catch(() => {});
+  } else {
+    setShaking((prev) => ({
+      ...prev,
+      [sin]: true
+    }));
 
     setFeedback((prev) => ({
       ...prev,
       [sin]: {
         type: 'error',
-        message: '⚠ ' + err.message.toUpperCase()
+        message: '✗ ' + result.message.toUpperCase()
       }
     }));
 
-  } finally {
-    setVerifying((prev) => ({
-      ...prev,
-      [sin]: false
-    }));
+    setTimeout(() => {
+      setShaking((prev) => ({
+        ...prev,
+        [sin]: false
+      }));
+    }, 400);
   }
+
+} catch (err) {
+  await timerState.refreshTimer().catch(() => {});
+
+  if (currentSessionId.current !== submittedSessionId) {
+    return;
+  }
+
+  setFeedback((prev) => ({
+    ...prev,
+    [sin]: {
+      type: 'error',
+      message: '⚠ ' + err.message.toUpperCase()
+    }
+  }));
+
+} finally {
+  setVerifying((prev) => ({
+    ...prev,
+    [sin]: false
+  }));
+ }
 }
 
 
@@ -295,6 +344,7 @@ async function handleValidate(sin) {
 
           <div className="flex gap-2.5 flex-wrap">
             <input
+              ref={flagInputRef}
               type="text"
               autoComplete="off"
               autoCapitalize="off"

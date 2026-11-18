@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes.js';
 import flagRoutes from './routes/flagRoutes.js';
 import leaderboardRoutes from './routes/leaderboardRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import sessionRoutes from './routes/sessionRoutes.js';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/flags', flagRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/sessions', sessionRoutes);
 
 app.use('/api', (req, res) => {
   res.status(404).json({

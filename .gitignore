@@ -24,3 +24,8 @@ Thumbs.db
 
 # Coverage
 coverage
+
+# Database backups
+nox-backup/
+*.bson
+*.metadata.json
