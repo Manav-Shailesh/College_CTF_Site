@@ -11,7 +11,7 @@ import {
   getBannedEmails
 } from '../controllers/adminUserController.js';
 
-import { setResource } from '../controllers/resourceController.js';
+import { getResource,setResource } from '../controllers/resourceController.js';
 
 import { requireAdmin } from '../middleware/auth.js';
 import { adminLoginLimiter } from '../middleware/rateLimiter.js';
@@ -38,6 +38,7 @@ router.get('/banned', requireAdmin, getBannedEmails);
 
 // Resource management
 router.post('/resource', requireAdmin, setResource);
+router.get('/resource', requireAdmin, getResource);
 
 // Competition timer
 router.get('/timer', requireAdmin, getTimer);

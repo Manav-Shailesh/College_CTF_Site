@@ -66,10 +66,22 @@ export default function AdminDashboard() {
     Promise.all([
       fetchAdminOverview(adminToken),
       fetchBannedEmails(adminToken),
-      fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/flags/resource`,
-        { headers: { Authorization: `Bearer ${adminToken}` } }
-      ).then((r) => r.json())
+   fetch(
+  `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/admin/resource`,
+  {
+    headers: {
+      Authorization: `Bearer ${adminToken}`
+    }
+  }
+).then(async (r) => {
+  const data = await r.json();
+
+  if (!r.ok) {
+    throw new Error(data.message || 'Could not fetch resource link.');
+  }
+
+  return data;
+})
     ])
       .then(([overviewData, bannedData, resourceData]) => {
         setUsers(overviewData.users);
@@ -189,91 +201,6 @@ async function handleStopTimer() {
   return (
     <div className="relative z-10 max-w-6xl mx-auto px-5 py-12 font-mono text-noxWhite">
       
-     {/* Timer Control Panel */}
-
-{/* Admin Controlled Competition Timer */}
-
-<div className="bg-gradient-to-r from-noxRed/10 to-noxRedDim/5 border border-noxRed/30 rounded-lg p-6 mb-6">
-
-  <div className="flex items-center justify-between flex-wrap gap-4">
-
-    <div>
-      <p className="text-xs tracking-widest uppercase text-noxAsh mb-1">
-        Competition Timer
-      </p>
-
-      <p
-        className="text-4xl font-bold text-noxWhite font-mono"
-        style={{
-          textShadow: '0 0 12px rgba(226,35,26,0.5)'
-        }}
-      >
-        {formatTime(timerState.elapsedMs)}
-      </p>
-
-      <p className="text-xs text-noxAsh mt-2">
-        {timerState.state === 'NOT_STARTED'
-          ? '⭘ NOT STARTED'
-          : timerState.state === 'RUNNING'
-          ? '⬤ RUNNING'
-          : '⏹ GAME ENDED'}
-      </p>
-
-      {timerState.startedAt && (
-        <p className="text-xs text-noxAsh mt-1">
-          Started: {new Date(timerState.startedAt).toLocaleString()}
-        </p>
-      )}
-
-      {timerState.stoppedAt && (
-        <p className="text-xs text-noxAsh mt-1">
-          Stopped: {new Date(timerState.stoppedAt).toLocaleString()}
-        </p>
-      )}
-    </div>
-
-    <div className="flex gap-2 flex-wrap">
-
-      {timerState.state === 'NOT_STARTED' && (
-        <button
-          onClick={handleStartTimer}
-          disabled={timerBusy}
-          className="px-5 py-3 text-xs font-bold tracking-wider uppercase rounded-md bg-noxRed text-noxWhite hover:shadow-noxGlowLg disabled:opacity-50 transition-all"
-        >
-          {timerBusy ? 'PROCESSING...' : '▶ START TIMER'}
-        </button>
-      )}
-
-      {timerState.state === 'RUNNING' && (
-        <button
-          onClick={handleStopTimer}
-          disabled={timerBusy}
-          className="px-5 py-3 text-xs font-bold tracking-wider uppercase rounded-md border border-noxRed text-noxRed hover:bg-noxRed/10 disabled:opacity-50 transition-all"
-        >
-          {timerBusy ? 'PROCESSING...' : '⏹ STOP TIMER'}
-        </button>
-      )}
-
-      {timerState.state === 'STOPPED' && (
-        <span className="px-5 py-3 text-xs font-bold tracking-wider uppercase text-noxRed border border-noxRed/40 rounded-md">
-          COMPETITION ENDED
-        </span>
-      )}
-
-    </div>
-  </div>
-
-  {timerMsg && (
-    <p className={`text-xs mt-4 ${
-      timerMsg.startsWith('Error') ? 'text-noxRed' : 'text-noxAsh'
-    }`}>
-      {timerMsg}
-    </p>
-  )}
-
-</div>
-
-
       {/* User Remove/Ban Confirmation Dialog */}
       {confirming && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -336,80 +263,6 @@ async function handleStopTimer() {
           {actionMsg}
         </div>
       )}
-
-      {/* Timer Control Panel */}
-      <div className="bg-gradient-to-r from-noxRed/10 to-noxRedDim/5 border border-noxRed/30 rounded-lg p-6 mb-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <p className="text-xs tracking-widest uppercase text-noxAsh mb-1">Competition Timer</p>
-            <p className="text-4xl font-bold text-noxWhite font-mono" style={{ textShadow: '0 0 12px rgba(226,35,26,0.5)' }}>
-              {formatTime(timerState.elapsedMs)}
-            </p>
-            <p className="text-xs text-noxAsh mt-1">
-              {timerState.isRunning
-                ? '⬤ Running'
-                : timerState.isPaused
-                ? '⏸ Paused'
-                : '⭘ Stopped'}
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap justify-end">
-            {!timerState.isRunning && !timerState.isPaused && (
-              <button
-                onClick={handleStartTimer}
-                className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md bg-noxRed text-noxWhite hover:shadow-noxGlowLg transition-all"
-              >
-                ▶ Start
-              </button>
-            )}
-            {timerState.isRunning && (
-              <>
-                <button
-                  onClick={handlePauseTimer}
-                  className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md bg-[#666] text-noxWhite hover:bg-[#777] transition-all"
-                >
-                  ⏸ Pause
-                </button>
-                <button
-                  onClick={handleStopTimer}
-                  className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md border border-noxRed/50 text-noxRed hover:bg-noxRed/10 transition-all"
-                >
-                  ⏹ Stop
-                </button>
-              </>
-            )}
-            {timerState.isPaused && (
-              <>
-                <button
-                  onClick={handleContinueTimer}
-                  className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md bg-noxRed text-noxWhite hover:shadow-noxGlowLg transition-all"
-                >
-                  ▶ Continue
-                </button>
-                <button
-                  onClick={handleStopTimer}
-                  className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md border border-noxRed/50 text-noxRed hover:bg-noxRed/10 transition-all"
-                >
-                  ⏹ Stop
-                </button>
-              </>
-            )}
-            {(timerState.isRunning || timerState.isPaused || timerState.elapsedMs > 0) && (
-              <button
-                onClick={() => setConfirmReset(true)}
-                className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase rounded-md border border-noxRed/30 text-noxRed hover:border-noxRed/60 transition-all"
-              >
-                ↻ Reset
-              </button>
-            )}
-          </div>
-        </div>
-        {timerMsg && (
-          <p className={`text-xs mt-3 ${timerMsg.startsWith('Error') ? 'text-noxRed' : 'text-noxAsh'}`}>
-            {timerMsg}
-          </p>
-        )}
-      </div>
 
       {/* Resource Link Panel */}
       <div className="bg-noxPanel border border-white/10 rounded-lg p-6 mb-6">
