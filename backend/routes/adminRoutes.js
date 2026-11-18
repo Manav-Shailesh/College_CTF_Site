@@ -37,8 +37,9 @@ router.delete('/users/:email/ban', requireAdmin, unbanUser);
 router.get('/banned', requireAdmin, getBannedEmails);
 
 // Resource management
-router.post('/resource', requireAdmin, setResource);
 router.get('/resource', requireAdmin, getResource);
+router.post('/resource', requireAdmin, setResource);
+
 
 // Competition timer
 router.get('/timer', requireAdmin, getTimer);
